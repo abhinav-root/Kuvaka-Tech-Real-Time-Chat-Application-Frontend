@@ -1,12 +1,16 @@
 import {
   Badge,
   Box,
+  Button,
+  CircularProgress,
   Divider,
   FormControl,
   IconButton,
   InputAdornment,
+  LinearProgress,
   Modal,
   OutlinedInput,
+  Snackbar,
   Stack,
   TextField,
   Typography,
@@ -14,7 +18,10 @@ import {
 import AddCircleIcon from "@mui/icons-material/AddCircle";
 import SearchIcon from "@mui/icons-material/Search";
 import Avatar from "@mui/material/Avatar";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import CancelIcon from "@mui/icons-material/Cancel";
+import axios from "../api/axios";
+import PersonAddIcon from "@mui/icons-material/PersonAdd";
 
 function stringToColor(string: string) {
   let hash = 0;
@@ -45,22 +52,84 @@ function stringAvatar(name: string) {
   };
 }
 
-const style = {
-  position: "absolute" as "absolute",
-  top: "50%",
-  left: "50%",
-  transform: "translate(-50%, -50%)",
-  width: 400,
-  bgcolor: "background.paper",
-  border: "2px solid #000",
-  boxShadow: 24,
-  p: 4,
-};
+export interface IUser {
+  _id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
+export interface IFriend extends IUser {
+  lastMessage: string;
+}
 
 export default function HomePage() {
-  const [open, setOpen] = useState(false);
-  const handleOpen = () => setOpen(true);
-  const handleClose = () => setOpen(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const handleModalOpen = () => setModalOpen(true);
+  const handleModalClose = () => setModalOpen(false);
+  const [search, setSearch] = useState("");
+  const [users, setUsers] = useState<IUser[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
+  const [friends, setFriends] = useState<IFriend[]>([]);
+  const [friendsLoading, setFriendsLoading] = useState(false)
+
+  useEffect(() => {
+    const getAllFriends = async () => {
+      try {
+        setFriendsLoading(true)
+        const response = await axios.get("/users/friends");
+        setFriends(response.data);
+      } catch (err) {
+        console.log(err);
+        setSnackbarMessage("Error loading friends");
+        setSnackbarOpen(true);
+      } finally {
+        setTimeout(() => setSnackbarOpen(false), 2000);
+        setFriendsLoading(false)
+      }
+    };
+    getAllFriends();
+  }, []);
+
+  async function searchUsers() {
+    try {
+      setIsLoading(true);
+      setUsers([]);
+      const response = await axios.get("/users", { params: { q: search } });
+      setUsers(response.data);
+    } catch (err) {
+      console.log(err);
+      setSnackbarMessage("Error searching users");
+      setSnackbarOpen(modalOpen);
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => setSnackbarOpen(false), 2000);
+    }
+  }
+
+  useEffect(() => {
+    if (search) {
+      searchUsers();
+    } else {
+      setUsers([]);
+    }
+  }, [search]);
+
+  async function addFriend(_id: string) {
+    try {
+      const response = await axios.post("/users/friends", {friendId: _id});
+      setUsers(response.data);
+    } catch (err) {
+      console.log(err);
+      setSnackbarMessage("Error searching users");
+      setSnackbarOpen(modalOpen);
+    } finally {
+        setSnackbarMessage("")
+    }
+  }
+  
 
   return (
     <Box>
@@ -78,7 +147,8 @@ export default function HomePage() {
             alignItems={"center"}
             bgcolor={(theme) => theme.palette.background.paper}
             borderRadius={2}
-            padding={1}
+            px={1}
+            py={2}
           >
             {/* <Typography
               color={(theme) => theme.palette.grey[800]}
@@ -99,7 +169,7 @@ export default function HomePage() {
                 }
               />
             </FormControl>
-            <IconButton onClick={handleOpen}>
+            <IconButton onClick={handleModalOpen}>
               <AddCircleIcon color="primary" sx={{ fontSize: 30 }} />
             </IconButton>
           </Box>
@@ -111,77 +181,92 @@ export default function HomePage() {
               fontWeight={600}
               color={(theme) => theme.palette.grey[800]}
             >
-              Friends
+              Friends ({friends.length})
             </Typography>
+            {friendsLoading && <Box my={2} textAlign={'center'}><CircularProgress /></Box>}
             <Box sx={{ overflowY: "auto", height: "100vh" }}>
               <Stack direction="column" divider={<Divider />}>
-                {[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1].map((element) => {
-                  return (
-                    <Box
-                      display={"flex"}
-                      bgcolor={(theme) => theme.palette.background.paper}
-                      py={2}
-                      px={1}
-                      borderRadius={2}
-                      sx={{
-                        ":hover": {
-                          cursor: "pointer",
-                          backgroundColor: (theme) => theme.palette.grey[200],
-                        },
-                      }}
-                    >
-                      <Avatar
-                        {...stringAvatar("Abhinav Singh")}
-                        sx={{ mr: 1 }}
-                      />
+                {!friendsLoading && friends.length === 0 ? (
+                  <Typography
+                    my={2}
+                    fontWeight={500}
+                    textAlign={"center"}
+                    color={(theme) => theme.palette.grey[600]}
+                  >
+                    Add friends to start chatting
+                  </Typography>
+                ) : (
+                  friends.map((friend) => {
+                    return (
                       <Box
                         display={"flex"}
-                        flexDirection={"column"}
-                        width={"100%"}
+                        bgcolor={(theme) => theme.palette.background.paper}
+                        py={2}
+                        px={1}
+                        borderRadius={2}
+                        sx={{
+                          ":hover": {
+                            cursor: "pointer",
+                            backgroundColor: (theme) => theme.palette.grey[200],
+                          },
+                        }}
                       >
+                        <Avatar
+                          {...stringAvatar(
+                            friend.firstName + " " + friend.lastName
+                          )}
+                          sx={{ mr: 1, textTransform: "capitalize"}}
+                        />
                         <Box
                           display={"flex"}
-                          justifyContent={"space-between"}
-                          sx={{ border: "1px solid red" }}
+                          flexDirection={"column"}
+                          width={"100%"}
                         >
-                          <Typography
-                            component={"span"}
-                            fontWeight={600}
-                            color={(theme) => theme.palette.grey[800]}
+                          <Box
+                            display={"flex"}
+                            justifyContent={"space-between"}
+                            sx={{ border: "1px solid red" }}
                           >
-                            Abhinav Singh
-                          </Typography>
-                          <Typography
-                            color={(theme) => theme.palette.grey[600]}
-                            fontSize={13}
-                            component={"span"}
-                          >{`3:02 PM`}</Typography>
-                        </Box>
-                        <Box
-                          display={"flex"}
-                          justifyContent={"space-between"}
-                          sx={{ border: "1px solid green" }}
-                        >
-                          <Typography
-                            component={"span"}
-                            color={(theme) => theme.palette.grey[600]}
-                            fontSize={14}
+                            <Typography
+                              component={"span"}
+                              fontWeight={600}
+                              color={(theme) => theme.palette.grey[800]}
+                              textTransform={'capitalize'}
+                            >
+                            {friend.firstName + " " + friend.lastName}
+                            </Typography>
+                            <Typography
+                              color={(theme) => theme.palette.grey[600]}
+                              fontSize={13}
+                              component={"span"}
+                            >{`3:02 PM`}</Typography>
+                          </Box>
+                          <Box
+                            display={"flex"}
+                            justifyContent={"space-between"}
+                            sx={{ border: "1px solid green" }}
                           >
-                            Hello, how are you today?
-                          </Typography>
-                          <Box component={"span"}>
-                            <Badge
-                              badgeContent={10}
-                              max={9}
-                              color="primary"
-                              sx={{ ml: -1.5 }}
-                            ></Badge>
+                            <Typography
+                              component={"span"}
+                              color={(theme) => theme.palette.grey[600]}
+                              fontSize={14}
+                            >
+                              Hello, how are you today?
+                            </Typography>
+                            <Box component={"span"}>
+                              <Badge
+                                badgeContent={10}
+                                max={9}
+                                color="primary"
+                                sx={{ ml: -1.5 }}
+                              ></Badge>
+                            </Box>
                           </Box>
                         </Box>
                       </Box>
-                    </Box>
-                  );
-                })}
+                    );
+                  })
+                )}
               </Stack>
             </Box>
           </Box>
@@ -189,20 +274,96 @@ export default function HomePage() {
         <Box width={"75%"} border={1} borderColor={"green"}></Box>
       </Box>
       <Modal
-        open={open}
-        onClose={handleClose}
+        open={modalOpen}
+        onClose={handleModalClose}
         aria-labelledby="modal-modal-title"
         aria-describedby="modal-modal-description"
       >
-        <Box sx={style}>
-          <Typography id="modal-modal-title" variant="h6" component="h2">
-            Text in a modal
-          </Typography>
-          <Typography id="modal-modal-description" sx={{ mt: 2 }}>
-            Duis mollis, est non commodo luctus, nisi erat porttitor ligula.
-          </Typography>
+        <Box
+          sx={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            width: 400,
+            bgcolor: "background.paper",
+            borderRadius: 3,
+            boxShadow: 24,
+            py: 1,
+            px: 2,
+          }}
+        >
+          <Box mb={2} textAlign={"right"}>
+            <IconButton aria-label="close" onClick={handleModalClose}>
+              <CancelIcon color="error" sx={{ fontSize: 30 }} />
+            </IconButton>
+          </Box>
+          <FormControl size="small" fullWidth>
+            <OutlinedInput
+              sx={{
+                borderRadius: 3,
+                bgcolor: (theme) => theme.palette.grey[100],
+              }}
+              placeholder="Search users"
+              onChange={(e) => setSearch(e.target.value)}
+              startAdornment={
+                <InputAdornment position="start">
+                  <SearchIcon />
+                </InputAdornment>
+              }
+            />
+          </FormControl>
+          <Box py={2}>
+            {isLoading && <LinearProgress />}
+            {!isLoading && search && users.length === 0 && (
+              <Typography
+                textAlign={"center"}
+                color={(theme) => theme.palette.grey[600]}
+              >
+                No users found
+              </Typography>
+            )}
+            <Stack direction="column" divider={<Divider />}>
+              {users.map((user) => {
+                return (
+                  <Box
+                    display={"flex"}
+                    alignItems={"center"}
+                    py={1}
+                    justifyContent={"space-between"}
+                  >
+                    <Box display={"flex"} alignItems={"center"}>
+                      <Avatar src="/broken-image.jpg" sx={{ mr: 1 }} />
+                      <Typography
+                        fontWeight={600}
+                        fontSize={18}
+                        textTransform={"capitalize"}
+                        color={(theme) => theme.palette.grey[900]}
+                      >
+                        {user.firstName + " " + user.lastName}
+                      </Typography>
+                    </Box>
+                    <Button
+                      variant="contained"
+                      startIcon={<PersonAddIcon />}
+                      onClick={() => addFriend(user._id)}
+                    >
+                      Add
+                    </Button>
+                  </Box>
+                );
+              })}
+            </Stack>
+          </Box>
         </Box>
       </Modal>
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={handleModalClose}
+        message={snackbarMessage}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      />
     </Box>
   );
 }
