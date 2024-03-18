@@ -3,6 +3,11 @@ import {
   Box,
   Button,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   Divider,
   FormControl,
   IconButton,
@@ -18,9 +23,10 @@ import {
 import AddCircleIcon from "@mui/icons-material/AddCircle";
 import SearchIcon from "@mui/icons-material/Search";
 import Avatar from "@mui/material/Avatar";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import CancelIcon from "@mui/icons-material/Cancel";
 import axios from "../api/axios";
+import DeleteIcon from "@mui/icons-material/Delete";
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
 
 function stringToColor(string: string) {
@@ -66,30 +72,36 @@ export interface IFriend extends IUser {
 export default function HomePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const handleModalOpen = () => setModalOpen(true);
-  const handleModalClose = () => setModalOpen(false);
+  const handleModalClose = () => {
+    setModalOpen(false);
+    setUsers([]);
+  };
   const [search, setSearch] = useState("");
   const [users, setUsers] = useState<IUser[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [friends, setFriends] = useState<IFriend[]>([]);
-  const [friendsLoading, setFriendsLoading] = useState(false)
+  const [friendsLoading, setFriendsLoading] = useState(false);
+  const [selectedFriend, setSelectedFriend] = useState<IFriend | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const getAllFriends = async () => {
+    try {
+      setFriendsLoading(true);
+      const response = await axios.get("/users/friends");
+      setFriends(response.data);
+    } catch (err) {
+      console.log(err);
+      setSnackbarMessage("Error loading friends");
+      setSnackbarOpen(true);
+    } finally {
+      setTimeout(() => setSnackbarOpen(false), 2000);
+      setFriendsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const getAllFriends = async () => {
-      try {
-        setFriendsLoading(true)
-        const response = await axios.get("/users/friends");
-        setFriends(response.data);
-      } catch (err) {
-        console.log(err);
-        setSnackbarMessage("Error loading friends");
-        setSnackbarOpen(true);
-      } finally {
-        setTimeout(() => setSnackbarOpen(false), 2000);
-        setFriendsLoading(false)
-      }
-    };
     getAllFriends();
   }, []);
 
@@ -102,7 +114,7 @@ export default function HomePage() {
     } catch (err) {
       console.log(err);
       setSnackbarMessage("Error searching users");
-      setSnackbarOpen(modalOpen);
+      setSnackbarOpen(true);
     } finally {
       setIsLoading(false);
       setTimeout(() => setSnackbarOpen(false), 2000);
@@ -119,44 +131,60 @@ export default function HomePage() {
 
   async function addFriend(_id: string) {
     try {
-      const response = await axios.post("/users/friends", {friendId: _id});
-      setUsers(response.data);
+      const response = await axios.post("/users/friends", { friendId: _id });
+      const { friend } = response.data;
+      setFriends((prev) => [...prev, friend]);
+      searchUsers();
+      setSnackbarMessage("Friend added");
+      setSnackbarOpen(true);
     } catch (err) {
       console.log(err);
-      setSnackbarMessage("Error searching users");
-      setSnackbarOpen(modalOpen);
+      setSnackbarMessage("Error occured while adding friend");
+      setSnackbarOpen(true);
     } finally {
-        setSnackbarMessage("")
+      setTimeout(() => setSnackbarOpen(false), 2000);
     }
   }
-  
+
+  async function removeFriend(_id: string) {
+    try {
+      setSelectedFriend(null);
+      setDialogOpen(false)
+      await axios.delete(`/users/friends/${_id}`);
+      getAllFriends();
+      setSnackbarMessage("Chat Deleted");
+      setSnackbarOpen(true);
+      setTimeout(() => setSnackbarOpen(false), 2000);
+    } catch (err) {
+      console.log(err);
+      setSnackbarMessage("Error occured while deleting chat");
+      setSnackbarOpen(true);
+    } finally {
+      setTimeout(() => setSnackbarOpen(false), 2000);
+    }
+  }
 
   return (
     <Box>
       <Box display={"flex"} justifyContent={"space-between"} height={"100vh"}>
+        {/* Friend List */}
         <Box
           width={"25%"}
           border={1}
           borderColor={"red"}
-          bgcolor={(theme) => theme.palette.grey[50]}
-          px={1}
+          // bgcolor={(theme) => theme.palette.grey[50]}
+          sx={{ overflowY: "auto" }}
         >
           <Box
             display={"flex"}
             justifyContent={"space-around"}
             alignItems={"center"}
             bgcolor={(theme) => theme.palette.background.paper}
-            borderRadius={2}
             px={1}
             py={2}
+            borderBottom={1}
+            mb={2}
           >
-            {/* <Typography
-              color={(theme) => theme.palette.grey[800]}
-              fontWeight={600}
-              fontSize={20}
-            >
-              Chat
-            </Typography> */}
             <FormControl size="small">
               <OutlinedInput
                 sx={{ borderRadius: 5 }}
@@ -174,7 +202,7 @@ export default function HomePage() {
             </IconButton>
           </Box>
           {/* Friends List */}
-          <Box bgcolor={(theme) => theme.palette.grey[50]} px={1}>
+          <Box bgcolor={(theme) => theme.palette.background.paper} px={1}>
             <Typography
               component={"h2"}
               variant="h6"
@@ -183,8 +211,12 @@ export default function HomePage() {
             >
               Friends ({friends.length})
             </Typography>
-            {friendsLoading && <Box my={2} textAlign={'center'}><CircularProgress /></Box>}
-            <Box sx={{ overflowY: "auto", height: "100vh" }}>
+            {friendsLoading && (
+              <Box my={2} textAlign={"center"}>
+                <CircularProgress />
+              </Box>
+            )}
+            <Box>
               <Stack direction="column" divider={<Divider />}>
                 {!friendsLoading && friends.length === 0 ? (
                   <Typography
@@ -199,6 +231,7 @@ export default function HomePage() {
                   friends.map((friend) => {
                     return (
                       <Box
+                        onClick={() => setSelectedFriend(friend)}
                         display={"flex"}
                         bgcolor={(theme) => theme.palette.background.paper}
                         py={2}
@@ -209,13 +242,17 @@ export default function HomePage() {
                             cursor: "pointer",
                             backgroundColor: (theme) => theme.palette.grey[200],
                           },
+                          backgroundColor:
+                            selectedFriend?._id === friend?._id
+                              ? (theme) => theme.palette.grey[200]
+                              : "none",
                         }}
                       >
                         <Avatar
                           {...stringAvatar(
                             friend.firstName + " " + friend.lastName
                           )}
-                          sx={{ mr: 1, textTransform: "capitalize"}}
+                          sx={{ mr: 1, textTransform: "capitalize" }}
                         />
                         <Box
                           display={"flex"}
@@ -225,15 +262,14 @@ export default function HomePage() {
                           <Box
                             display={"flex"}
                             justifyContent={"space-between"}
-                            sx={{ border: "1px solid red" }}
                           >
                             <Typography
                               component={"span"}
                               fontWeight={600}
                               color={(theme) => theme.palette.grey[800]}
-                              textTransform={'capitalize'}
+                              textTransform={"capitalize"}
                             >
-                            {friend.firstName + " " + friend.lastName}
+                              {friend.firstName + " " + friend.lastName}
                             </Typography>
                             <Typography
                               color={(theme) => theme.palette.grey[600]}
@@ -244,7 +280,6 @@ export default function HomePage() {
                           <Box
                             display={"flex"}
                             justifyContent={"space-between"}
-                            sx={{ border: "1px solid green" }}
                           >
                             <Typography
                               component={"span"}
@@ -271,11 +306,60 @@ export default function HomePage() {
             </Box>
           </Box>
         </Box>
-        <Box width={"75%"} border={1} borderColor={"green"}></Box>
+        {/* Selected Friend Chat */}
+
+        {!selectedFriend ? (
+          <Box
+            width={"75%"}
+            display={"flex"}
+            justifyContent={"center"}
+            alignItems={"center"}
+          >
+            <Typography
+              fontSize={20}
+              color={(theme) => theme.palette.grey[700]}
+            >
+              Select a chat to start messaging
+            </Typography>
+          </Box>
+        ) : (
+          <Box
+            width={"75%"}
+            border={1}
+            borderColor={"green"}
+            sx={{ overflowY: "auto" }}
+          >
+            <Box
+              display={"flex"}
+              alignItems={"center"}
+              px={4}
+              py={2}
+              boxShadow={2}
+            >
+              <Avatar sx={{ mr: 2, height: 45, width: 45 }} />
+              <Typography
+                fontWeight={700}
+                fontSize={20}
+                textTransform={"capitalize"}
+                flexGrow={1}
+              >
+                {selectedFriend?.firstName + " " + selectedFriend?.lastName}
+              </Typography>
+              <Button
+                variant="outlined"
+                startIcon={<DeleteIcon />}
+                color="error"
+                onClick={() => setDialogOpen(true)}
+              >
+                Delete Chat
+              </Button>
+            </Box>
+          </Box>
+        )}
       </Box>
       <Modal
         open={modalOpen}
-        onClose={handleModalClose}
+        onClose={() => {handleModalClose(); setUsers([])}}
         aria-labelledby="modal-modal-title"
         aria-describedby="modal-modal-description"
       >
@@ -291,12 +375,18 @@ export default function HomePage() {
             boxShadow: 24,
             py: 1,
             px: 2,
+            maxHeight: "80vh",
+            overflowY: "auto"
           }}
         >
-          <Box mb={2} textAlign={"right"}>
-            <IconButton aria-label="close" onClick={handleModalClose}>
-              <CancelIcon color="error" sx={{ fontSize: 30 }} />
-            </IconButton>
+          <Box my={2} textAlign={"right"}>
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleModalClose}
+            >
+              Close
+            </Button>
           </Box>
           <FormControl size="small" fullWidth>
             <OutlinedInput
@@ -331,6 +421,7 @@ export default function HomePage() {
                     alignItems={"center"}
                     py={1}
                     justifyContent={"space-between"}
+                    
                   >
                     <Box display={"flex"} alignItems={"center"}>
                       <Avatar src="/broken-image.jpg" sx={{ mr: 1 }} />
@@ -364,6 +455,34 @@ export default function HomePage() {
         message={snackbarMessage}
         anchorOrigin={{ vertical: "top", horizontal: "center" }}
       />
+      <React.Fragment>
+        <Dialog
+          open={dialogOpen}
+          onClose={() => setDialogOpen(false)}
+          aria-labelledby="alert-dialog-title"
+          aria-describedby="alert-dialog-description"
+        >
+          <DialogTitle id="alert-dialog-title">{"Delete chat?"}</DialogTitle>
+          <DialogContent>
+            <DialogContentText id="alert-dialog-description">
+              All the chats with this person will be permanently deleted
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button variant="outlined" onClick={() => setDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              onClick={() => removeFriend(selectedFriend?._id)}
+              autoFocus
+            >
+              Delete
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </React.Fragment>
     </Box>
   );
 }
